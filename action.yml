@@ -1,0 +1,69 @@
+name: 'PR Review using Ollama'
+description: 'Automated code review using the Ollama API.'
+inputs:
+  token:
+    description: 'The GitHub token to use.'
+    required: true
+  host:
+    description: 'The Ollama API host to use.'
+    required: true
+  model:
+    description: 'The AI model to use.'
+    required: true
+    default: 'mistral-nemo'
+  prompt:
+    description: 'Custom prompt for code review.'
+    required: true
+    default: |
+      You are a software developer responsible for code reviews in the engineering department of a technology/software company.
+      - After reviewing the submitted code, you write a review summarizing your findings.
+      - Include information such as problems found, recommendations for improvement, areas of strength, and an overall assessment of the code quality.
+      - Your review should be organized, easy to understand, and provide actionable feedback to the developer.
+      - Since it's a one-way communication, there's no need to introduce yourself or say hello, just get to the point.
+      Review the following file:
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set locale to UTF-8
+      run: |
+        sudo locale-gen ko_KR.UTF-8
+        export LC_ALL=ko_KR.UTF-8
+        export LANG=ko_KR.UTF-8
+
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Get modified files
+      id: get-modified-files
+      uses: tj-actions/changed-files@v43
+
+    - name: Review modified files
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+        HOST: ${{ inputs.host }}
+      run: |
+        > ollama_review.txt
+
+        for file in ${{ steps.get-modified-files.outputs.all_changed_files }}; do
+          review=$(python code_review.py "$HOST" "${{ inputs.model }}" "$file" "${{ inputs.prompt }}")
+
+          if [ -z "$review" ]; then
+            review="No review available or API response error."
+          fi
+
+          echo -e "$review" >> ollama_review.txt
+        done
+
+        gh pr comment ${{ github.event.pull_request.number }} --body "$(cat ollama_review.txt)"
+      shell: bash

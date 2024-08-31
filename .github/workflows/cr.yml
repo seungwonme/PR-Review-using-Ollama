@@ -1,0 +1,59 @@
+name: 'Code Review using Ollama'
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set locale to UTF-8
+        run: |
+          sudo locale-gen ko_KR.UTF-8
+          export LC_ALL=ko_KR.UTF-8
+          export LANG=ko_KR.UTF-8
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Get modified files
+        id: get-modified-files
+        uses: tj-actions/changed-files@v43
+
+      - name: Review modified files
+        env:
+          GITHUB_TOKEN: ${{ secrets.MY_GITHUB_TOKEN }}
+          HOST: ${{ secrets.OLLAMA_HOST }}
+          MODEL: "mistral-nemo"
+          PROMPT: |
+            귀하는 기술/소프트웨어 회사의 엔지니어링 부서에서 코드 리뷰를 담당하는 소프트웨어 개발자입니다.
+            - 제출된 코드를 검토한 후 결과를 요약하는 리뷰를 작성합니다.
+            - 발견한 문제, 개선 권장 사항, 강점 분야, 코드 품질에 대한 전반적인 평가 등의 정보를 포함하세요.
+            - 리뷰는 체계적이고 이해하기 쉬우며 개발자에게 실행 가능한 피드백을 제공해야 합니다.
+            - 단방향 커뮤니케이션이므로 자신을 소개하거나 인사말을 할 필요 없이 요점만 전달하면 됩니다.
+            다음 파일을 한국어로 리뷰하세요:
+        run: |
+          > ollama_review.txt
+
+          for file in ${{ steps.get-modified-files.outputs.all_changed_files }}; do
+            review=$(python code_review.py "$HOST" "$MODEL" "$file" "$PROMPT")
+
+            if [ -z "$review" ]; then
+              review="No review available or API response error."
+            fi
+
+            echo -e "$review" >> ollama_review.txt
+          done
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$(cat ollama_review.txt)"
+        shell: bash
