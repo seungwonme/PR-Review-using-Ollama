@@ -50,6 +50,10 @@ runs:
       id: get-modified-files
       uses: tj-actions/changed-files@v43
 
+    - name: Debug modified files
+      run: echo "${{ steps.get-modified-files.outputs.all_changed_files }}"
+      shell: bash
+
     - name: Review modified files
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
